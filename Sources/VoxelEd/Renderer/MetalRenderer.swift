@@ -28,7 +28,9 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     private var sceneUniforms = SceneUniforms(
         viewProjectionMatrix: matrix_identity_float4x4,
         lightDirection: simd_normalize(SIMD3<Float>(0.45, 0.85, 0.3)),
-        ambientLight: 0.28
+        ambientLight: 0.28,
+        fillLightDirection: simd_normalize(SIMD3<Float>(-0.55, 0.35, -0.65)),
+        fillLightIntensity: 0.26
     )
     private var currentGridDimensions = VoxelDimensions(width: 16, height: 16, depth: 16)
     private var viewportSize: CGSize = .zero

@@ -5,6 +5,8 @@ struct SceneUniforms {
     float4x4 viewProjectionMatrix;
     float3 lightDirection;
     float ambientLight;
+    float3 fillLightDirection;
+    float fillLightIntensity;
 };
 
 struct GridVertex {
@@ -87,8 +89,9 @@ fragment half4 voxel_fragment(
     half4 baseColor = paletteTexture.sample(paletteSampler, float2(u, 0.5));
 
     float3 normal = normalize(in.normal);
-    float diffuse = max(dot(normal, normalize(uniforms.lightDirection)), 0.0);
-    float light = uniforms.ambientLight + ((1.0 - uniforms.ambientLight) * diffuse);
+    float keyDiffuse = max(dot(normal, normalize(uniforms.lightDirection)), 0.0);
+    float fillDiffuse = max(dot(normal, normalize(uniforms.fillLightDirection)), 0.0) * uniforms.fillLightIntensity;
+    float light = min(1.0, uniforms.ambientLight + ((1.0 - uniforms.ambientLight) * keyDiffuse) + fillDiffuse);
 
     return half4(baseColor.rgb * half(light), baseColor.a);
 }

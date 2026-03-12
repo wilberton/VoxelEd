@@ -4,6 +4,8 @@ struct SceneUniforms {
     var viewProjectionMatrix: simd_float4x4
     var lightDirection: SIMD3<Float>
     var ambientLight: Float
+    var fillLightDirection: SIMD3<Float>
+    var fillLightIntensity: Float
 }
 
 struct GridVertex {
