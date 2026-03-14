@@ -68,7 +68,11 @@ struct SidebarView: View {
                     onRemoveAnimationSequenceFrame: appState.removeFrameFromSelectedAnimation
                 )
 
-                SettingsPanelView(edgeOpacity: $appState.edgeOpacity)
+                SettingsPanelView(
+                    isGridVisible: $appState.isGridVisible,
+                    isAxesVisible: $appState.isAxesVisible,
+                    edgeOpacity: $appState.edgeOpacity
+                )
 
                 ModelInfoView(
                     dimensions: appState.voxelGrid.dimensions,

@@ -89,6 +89,8 @@ final class AppState: ObservableObject {
     @Published var cubeToolState: CubeToolState?
     @Published var isPlaying = false
     @Published var isXSymmetryEnabled = false
+    @Published var isGridVisible = true
+    @Published var isAxesVisible = true
     @Published var edgeOpacity: Float = 0.5
     @Published private(set) var cameraResetToken = 0
     @Published private(set) var hasUnsavedChanges = false

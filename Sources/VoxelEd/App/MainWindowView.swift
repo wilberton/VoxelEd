@@ -16,7 +16,9 @@ struct MainWindowView: View {
                 VStack {
                     HStack {
                         Spacer()
-                        OrientationAxesOverlay(axes: orientationOverlayState.axes)
+                        if appState.isAxesVisible {
+                            OrientationAxesOverlay(axes: orientationOverlayState.axes)
+                        }
                     }
                     Spacer()
                     if let transientMessage = appState.transientMessage {

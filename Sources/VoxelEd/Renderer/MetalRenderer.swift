@@ -33,6 +33,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         materialSettings: SIMD4<Float>(0.5, 0, 0, 0)
     )
     private var currentGridDimensions = VoxelDimensions(width: 16, height: 16, depth: 16)
+    private var isGridVisible = true
     private var viewportSize: CGSize = .zero
     private var gridVertexCount = 0
     private var axisVertexCount = 0
@@ -93,8 +94,16 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
 
     func update(appState: AppState) {
         currentGridDimensions = appState.voxelGrid.dimensions
+        isGridVisible = appState.isGridVisible
         sceneUniforms.materialSettings.x = appState.edgeOpacity
-        updateGridBuffer(for: appState.voxelGrid.dimensions)
+        if isGridVisible {
+            updateGridBuffer(for: appState.voxelGrid.dimensions, includeGrid: true, includeAxes: true)
+        } else {
+            gridVertexCount = 0
+            gridVertexBuffer = nil
+            axisVertexCount = 0
+            axisVertexBuffer = nil
+        }
         updateVoxelInstanceBuffer(for: appState.voxelGrid)
         paletteTexture = deviceInstance.flatMap { PaletteTexture.makeTexture(device: $0, palette: appState.palette) }
         updateHover(currentHover, in: appState.voxelGrid)
@@ -116,7 +125,9 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
 
         viewportSize = view.drawableSize
         sceneUniforms.viewProjectionMatrix = cameraController.projectionMatrix(viewportSize: viewportSize) * cameraController.viewMatrix()
-        updateGridBuffer(for: currentGridDimensions)
+        if isGridVisible {
+            updateGridBuffer(for: currentGridDimensions, includeGrid: true, includeAxes: true)
+        }
         descriptor.colorAttachments[0].clearColor = clearColor
 
         guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) else {
@@ -127,6 +138,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         encoder.setDepthStencilState(depthState)
 
         if
+            isGridVisible,
             let gridPipelineState,
             let gridVertexBuffer,
             gridVertexCount > 0
@@ -203,30 +215,40 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         commandBuffer.commit()
     }
 
-    private func updateGridBuffer(for dimensions: VoxelDimensions) {
-        let vertices = GridMesh.makeVertices(
-            width: dimensions.width,
-            height: dimensions.height,
-            depth: dimensions.depth,
-            cameraPosition: cameraController.cameraPosition,
-            focusPoint: cameraController.focusPoint
-        )
-        gridVertexCount = vertices.count
-        gridVertexBuffer = deviceInstance?.makeBuffer(
-            bytes: vertices,
-            length: MemoryLayout<GridVertex>.stride * vertices.count
-        )
+    private func updateGridBuffer(for dimensions: VoxelDimensions, includeGrid: Bool, includeAxes: Bool) {
+        if includeGrid {
+            let vertices = GridMesh.makeVertices(
+                width: dimensions.width,
+                height: dimensions.height,
+                depth: dimensions.depth,
+                cameraPosition: cameraController.cameraPosition,
+                focusPoint: cameraController.focusPoint
+            )
+            gridVertexCount = vertices.count
+            gridVertexBuffer = deviceInstance?.makeBuffer(
+                bytes: vertices,
+                length: MemoryLayout<GridVertex>.stride * vertices.count
+            )
+        } else {
+            gridVertexCount = 0
+            gridVertexBuffer = nil
+        }
 
-        let axisVertices = GridMesh.makeAxisVertices(
-            width: dimensions.width,
-            height: dimensions.height,
-            depth: dimensions.depth
-        )
-        axisVertexCount = axisVertices.count
-        axisVertexBuffer = deviceInstance?.makeBuffer(
-            bytes: axisVertices,
-            length: MemoryLayout<GridVertex>.stride * axisVertices.count
-        )
+        if includeAxes {
+            let axisVertices = GridMesh.makeAxisVertices(
+                width: dimensions.width,
+                height: dimensions.height,
+                depth: dimensions.depth
+            )
+            axisVertexCount = axisVertices.count
+            axisVertexBuffer = deviceInstance?.makeBuffer(
+                bytes: axisVertices,
+                length: MemoryLayout<GridVertex>.stride * axisVertices.count
+            )
+        } else {
+            axisVertexCount = 0
+            axisVertexBuffer = nil
+        }
     }
 
     private func updateVoxelInstanceBuffer(for grid: VoxelGrid) {
