@@ -19,6 +19,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     private var hoverVertexBuffer: MTLBuffer?
     private var previewVertexBuffer: MTLBuffer?
     private var paletteTexture: MTLTexture?
+    private var faceTexture: MTLTexture?
 
     private let voxelPipelineState: MTLRenderPipelineState?
     private let gridPipelineState: MTLRenderPipelineState?
@@ -27,10 +28,9 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
 
     private var sceneUniforms = SceneUniforms(
         viewProjectionMatrix: matrix_identity_float4x4,
-        lightDirection: simd_normalize(SIMD3<Float>(0.45, 0.85, 0.3)),
-        ambientLight: 0.28,
-        fillLightDirection: simd_normalize(SIMD3<Float>(-0.55, 0.35, -0.65)),
-        fillLightIntensity: 0.26
+        keyLightAndAmbient: SIMD4<Float>(simd_normalize(SIMD3<Float>(0.45, 0.85, 0.3)), 0.28),
+        fillLightAndIntensity: SIMD4<Float>(simd_normalize(SIMD3<Float>(-0.55, 0.35, -0.65)), 0.26),
+        materialSettings: SIMD4<Float>(0.5, 0, 0, 0)
     )
     private var currentGridDimensions = VoxelDimensions(width: 16, height: 16, depth: 16)
     private var viewportSize: CGSize = .zero
@@ -55,6 +55,12 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         self.hoverPipelineState = MetalRenderer.makeHoverPipelineState(device: deviceInstance, library: library)
         self.previewPipelineState = MetalRenderer.makePreviewPipelineState(device: deviceInstance, library: library)
         super.init()
+
+        if let deviceInstance {
+            faceTexture =
+                ImageTexture.makeTexture(device: deviceInstance, resource: "Textures/VoxelFace", extension: "png")
+                ?? ImageTexture.makeSolidColorTexture(device: deviceInstance, color: SIMD4<UInt8>(255, 255, 255, 255))
+        }
 
         if deviceInstance == nil {
             print("MetalRenderer: no Metal device available")
@@ -87,6 +93,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
 
     func update(appState: AppState) {
         currentGridDimensions = appState.voxelGrid.dimensions
+        sceneUniforms.materialSettings.x = appState.edgeOpacity
         updateGridBuffer(for: appState.voxelGrid.dimensions)
         updateVoxelInstanceBuffer(for: appState.voxelGrid)
         paletteTexture = deviceInstance.flatMap { PaletteTexture.makeTexture(device: $0, palette: appState.palette) }
@@ -157,6 +164,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             encoder.setVertexBytes(&uniforms, length: MemoryLayout<SceneUniforms>.stride, index: 2)
             encoder.setFragmentBytes(&uniforms, length: MemoryLayout<SceneUniforms>.stride, index: 0)
             encoder.setFragmentTexture(paletteTexture, index: 0)
+            encoder.setFragmentTexture(faceTexture, index: 1)
             encoder.drawPrimitives(
                 type: .triangle,
                 vertexStart: 0,

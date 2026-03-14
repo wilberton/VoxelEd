@@ -12,14 +12,19 @@ enum MeshFactory {
         let p011 = SIMD3<Float>(0, 1, 1)
         let p111 = SIMD3<Float>(1, 1, 1)
 
+        let uv00 = SIMD2<Float>(0, 0)
+        let uv10 = SIMD2<Float>(1, 0)
+        let uv11 = SIMD2<Float>(1, 1)
+        let uv01 = SIMD2<Float>(0, 1)
+
         func face(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ d: SIMD3<Float>, normal: SIMD3<Float>) -> [CubeVertex] {
             [
-                CubeVertex(position: a, normal: normal),
-                CubeVertex(position: b, normal: normal),
-                CubeVertex(position: c, normal: normal),
-                CubeVertex(position: a, normal: normal),
-                CubeVertex(position: c, normal: normal),
-                CubeVertex(position: d, normal: normal)
+                CubeVertex(position: a, normal: normal, uv: uv00),
+                CubeVertex(position: b, normal: normal, uv: uv10),
+                CubeVertex(position: c, normal: normal, uv: uv11),
+                CubeVertex(position: a, normal: normal, uv: uv00),
+                CubeVertex(position: c, normal: normal, uv: uv11),
+                CubeVertex(position: d, normal: normal, uv: uv01)
             ]
         }
 

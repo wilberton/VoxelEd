@@ -96,7 +96,7 @@ final class ViewportInputView: MTKView {
 
     override func scrollWheel(with event: NSEvent) {
         if event.phase == .began || event.phase == .changed || event.momentumPhase == .changed {
-            if event.modifierFlags.contains(.option) {
+            if event.modifierFlags.contains(.command) {
                 inputHandler?.viewportDidZoom(delta: event.scrollingDeltaY)
             } else {
                 inputHandler?.viewportDidPan(

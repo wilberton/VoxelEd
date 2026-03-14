@@ -3,10 +3,9 @@ using namespace metal;
 
 struct SceneUniforms {
     float4x4 viewProjectionMatrix;
-    float3 lightDirection;
-    float ambientLight;
-    float3 fillLightDirection;
-    float fillLightIntensity;
+    float4 keyLightAndAmbient;
+    float4 fillLightAndIntensity;
+    float4 materialSettings;
 };
 
 struct GridVertex {
@@ -17,6 +16,7 @@ struct GridVertex {
 struct CubeVertex {
     float3 position;
     float3 normal;
+    float2 uv;
 };
 
 struct VoxelInstanceGPU {
@@ -28,6 +28,7 @@ struct VertexOut {
     float4 position [[position]];
     float3 normal;
     float paletteIndex;
+    float2 uv;
 };
 
 struct GridVertexOut {
@@ -75,23 +76,30 @@ vertex VertexOut voxel_vertex(
     out.position = uniforms.viewProjectionMatrix * float4(worldPosition, 1.0);
     out.normal = cubeVertex.normal;
     out.paletteIndex = float(voxelInstance.paletteIndex);
+    out.uv = cubeVertex.uv;
     return out;
 }
 
 fragment half4 voxel_fragment(
     VertexOut in [[stage_in]],
     constant SceneUniforms &uniforms [[buffer(0)]],
-    texture2d<half> paletteTexture [[texture(0)]]
+    texture2d<half> paletteTexture [[texture(0)]],
+    texture2d<half> faceTexture [[texture(1)]]
 ) {
     constexpr sampler paletteSampler(coord::normalized, address::clamp_to_edge, filter::nearest);
+    constexpr sampler faceSampler(coord::normalized, address::repeat, filter::linear);
     float paletteWidth = float(paletteTexture.get_width());
     float u = (in.paletteIndex + 0.5) / paletteWidth;
     half4 baseColor = paletteTexture.sample(paletteSampler, float2(u, 0.5));
+    half4 faceColor = faceTexture.sample(faceSampler, in.uv);
+    half edgeOpacity = half(clamp(uniforms.materialSettings.x, 0.0, 1.0));
+    half3 edgeMix = mix(half3(1.0), faceColor.rgb, edgeOpacity);
+    half3 texturedColor = baseColor.rgb * edgeMix;
 
     float3 normal = normalize(in.normal);
-    float keyDiffuse = max(dot(normal, normalize(uniforms.lightDirection)), 0.0);
-    float fillDiffuse = max(dot(normal, normalize(uniforms.fillLightDirection)), 0.0) * uniforms.fillLightIntensity;
-    float light = min(1.0, uniforms.ambientLight + ((1.0 - uniforms.ambientLight) * keyDiffuse) + fillDiffuse);
+    float keyDiffuse = max(dot(normal, normalize(uniforms.keyLightAndAmbient.xyz)), 0.0);
+    float fillDiffuse = max(dot(normal, normalize(uniforms.fillLightAndIntensity.xyz)), 0.0) * uniforms.fillLightAndIntensity.w;
+    float light = min(1.0, uniforms.keyLightAndAmbient.w + ((1.0 - uniforms.keyLightAndAmbient.w) * keyDiffuse) + fillDiffuse);
 
-    return half4(baseColor.rgb * half(light), baseColor.a);
+    return half4(texturedColor * half(light), baseColor.a);
 }

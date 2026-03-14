@@ -2,10 +2,9 @@ import simd
 
 struct SceneUniforms {
     var viewProjectionMatrix: simd_float4x4
-    var lightDirection: SIMD3<Float>
-    var ambientLight: Float
-    var fillLightDirection: SIMD3<Float>
-    var fillLightIntensity: Float
+    var keyLightAndAmbient: SIMD4<Float>
+    var fillLightAndIntensity: SIMD4<Float>
+    var materialSettings: SIMD4<Float>
 }
 
 struct GridVertex {
@@ -18,6 +17,7 @@ typealias HoverVertex = GridVertex
 struct CubeVertex {
     var position: SIMD3<Float>
     var normal: SIMD3<Float>
+    var uv: SIMD2<Float>
 }
 
 struct VoxelInstanceGPU {
