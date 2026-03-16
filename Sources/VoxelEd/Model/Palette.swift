@@ -11,7 +11,7 @@ enum PaletteImportError: LocalizedError {
         case .unreadableImage:
             return "The selected file could not be read as an image."
         case let .invalidDimensions(width, height):
-            return "Palette image must be exactly 64x1 pixels. Received \(width)x\(height)."
+            return "Palette image must contain exactly 64 pixels. Received \(width)x\(height)."
         case .pixelBufferCreationFailed:
             return "Failed to read pixel data from the palette image."
         }
@@ -153,19 +153,19 @@ extension Palette {
             throw PaletteImportError.unreadableImage
         }
 
-        guard cgImage.width == expectedColorCount, cgImage.height == 1 else {
+        guard cgImage.width * cgImage.height == expectedColorCount else {
             throw PaletteImportError.invalidDimensions(width: cgImage.width, height: cgImage.height)
         }
 
         let bytesPerPixel = 4
-        let bytesPerRow = expectedColorCount * bytesPerPixel
-        var pixels = Array(repeating: UInt8(0), count: bytesPerRow)
+        let bytesPerRow = cgImage.width * bytesPerPixel
+        var pixels = Array(repeating: UInt8(0), count: bytesPerRow * cgImage.height)
 
         guard
             let context = CGContext(
                 data: &pixels,
-                width: expectedColorCount,
-                height: 1,
+                width: cgImage.width,
+                height: cgImage.height,
                 bitsPerComponent: 8,
                 bytesPerRow: bytesPerRow,
                 space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
@@ -175,7 +175,7 @@ extension Palette {
             throw PaletteImportError.pixelBufferCreationFailed
         }
 
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: expectedColorCount, height: 1))
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height))
 
         let colors = (0..<expectedColorCount).map { index in
             let byteIndex = index * bytesPerPixel

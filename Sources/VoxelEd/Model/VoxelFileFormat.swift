@@ -2,15 +2,22 @@ import AppKit
 import Foundation
 import UniformTypeIdentifiers
 
+enum LoadedVoxelDocumentFormat: Equatable, Sendable {
+    case vxm
+    case legacyVX
+}
+
 struct LoadedVoxelDocument {
     var frames: [VoxelGrid]
     var palette: Palette
     var animations: [VoxelAnimation]
+    var format: LoadedVoxelDocumentFormat
 }
 
 enum VoxelFileError: LocalizedError {
     case fileTooSmall
     case invalidMagic
+    case invalidLegacySize(expected: Int, actual: Int)
     case invalidChunkHeader
     case truncatedChunk(String)
     case missingChunk(String)
@@ -27,9 +34,11 @@ enum VoxelFileError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .fileTooSmall:
-            return "The file is too small to be a VXM model."
+            return "The file is too small to be a supported voxel model."
         case .invalidMagic:
-            return "The file does not start with a valid VXM header."
+            return "The file does not start with a valid VXM or legacy VX header."
+        case let .invalidLegacySize(expected, actual):
+            return "The legacy VX file has \(actual) bytes, but \(expected) were expected from its header."
         case .invalidChunkHeader:
             return "The file contains an invalid chunk header."
         case let .truncatedChunk(chunkId):
@@ -103,6 +112,32 @@ enum VoxelFileFormat {
     }
 
     static func decode(_ data: Data) throws -> LoadedVoxelDocument {
+        guard data.count >= 4 else {
+            throw VoxelFileError.fileTooSmall
+        }
+
+        if String(data: data.prefix(4), encoding: .ascii) == "VXM1" {
+            return try decodeVXM(data)
+        }
+
+        if String(data: data.prefix(2), encoding: .ascii) == "VX" {
+            return try decodeLegacyVX(data)
+        }
+
+        throw VoxelFileError.invalidMagic
+    }
+
+    @MainActor
+    static func openPanel() -> NSOpenPanel {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [contentType, .data]
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        return panel
+    }
+
+    private static func decodeVXM(_ data: Data) throws -> LoadedVoxelDocument {
         guard data.count >= 16 else {
             throw VoxelFileError.fileTooSmall
         }
@@ -161,7 +196,84 @@ enum VoxelFileFormat {
             animations = []
         }
 
-        return LoadedVoxelDocument(frames: frames, palette: palette, animations: animations)
+        return LoadedVoxelDocument(frames: frames, palette: palette, animations: animations, format: .vxm)
+    }
+
+    private static func decodeLegacyVX(_ data: Data) throws -> LoadedVoxelDocument {
+        guard data.count >= 8 else {
+            throw VoxelFileError.fileTooSmall
+        }
+
+        let animationCount = Int(data[data.startIndex + 3])
+        let dimensions = VoxelDimensions(
+            width: Int(data[data.startIndex + 4]),
+            height: Int(data[data.startIndex + 5]),
+            depth: Int(data[data.startIndex + 6])
+        )
+
+        let rawWidth = Int(data[data.startIndex + 4])
+        let rawHeight = Int(data[data.startIndex + 5])
+        let rawDepth = Int(data[data.startIndex + 6])
+        guard dimensions.width == rawWidth, dimensions.height == rawHeight, dimensions.depth == rawDepth else {
+            throw VoxelFileError.unsupportedDimensions(dimensions)
+        }
+
+        let frameCount = Int(data[data.startIndex + 7])
+        guard frameCount > 0 else {
+            throw VoxelFileError.unsupportedFrameCount(frameCount)
+        }
+
+        let headerSize = 8
+        let animationRecordSize = 28
+        let frameSize = dimensions.voxelCount
+        let expectedSize = headerSize + (animationCount * animationRecordSize) + (frameCount * frameSize)
+        guard data.count == expectedSize else {
+            throw VoxelFileError.invalidLegacySize(expected: expectedSize, actual: data.count)
+        }
+
+        var cursor = headerSize
+        var animations: [VoxelAnimation] = []
+        animations.reserveCapacity(animationCount)
+
+        for _ in 0..<animationCount {
+            let nameBytes = Array(data[cursor..<(cursor + 9)])
+            cursor += 9
+            let terminator = nameBytes.firstIndex(of: 0) ?? nameBytes.count
+            let name = String(decoding: nameBytes.prefix(min(terminator, 8)), as: UTF8.self)
+            let fps = Int(data[cursor])
+            let sequenceCount = min(Int(data[cursor + 1]), VoxelAnimation.maxFrameIndices)
+            cursor += 3 // fps, frameCount, padding
+
+            let rawFrameIndices = Array(data[cursor..<(cursor + 16)])
+            cursor += 16
+
+            let frameIndices = rawFrameIndices
+                .prefix(sequenceCount)
+                .map(Int.init)
+                .filter { (0..<frameCount).contains($0) }
+
+            animations.append(VoxelAnimation(name: name.isEmpty ? "Anim \(animations.count + 1)" : name, fps: fps, frameIndices: frameIndices))
+        }
+
+        var frames: [VoxelGrid] = []
+        frames.reserveCapacity(frameCount)
+
+        for _ in 0..<frameCount {
+            var grid = VoxelGrid(dimensions: dimensions)
+            for z in 0..<dimensions.depth {
+                for y in 0..<dimensions.height {
+                    for x in 0..<dimensions.width {
+                        let flippedZ = dimensions.depth - 1 - z
+                        grid[x, y, flippedZ] = data[cursor]
+                        cursor += 1
+                    }
+                }
+            }
+            frames.append(grid)
+        }
+
+        let legacyPalette = PalettePreset.builtIn.first { $0.name == "MightyKapow" }?.palette ?? PalettePreset.defaultPreset.palette
+        return LoadedVoxelDocument(frames: frames, palette: legacyPalette, animations: animations, format: .legacyVX)
     }
 
     static func encode(frames: [VoxelGrid], palette: Palette, animations: [VoxelAnimation]) throws -> Data {
@@ -206,16 +318,6 @@ enum VoxelFileFormat {
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
         panel.nameFieldStringValue = url?.lastPathComponent ?? "Untitled.\(self.extension)"
-        return panel
-    }
-
-    @MainActor
-    static func openPanel() -> NSOpenPanel {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [contentType]
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
         return panel
     }
 

@@ -792,7 +792,12 @@ final class AppState: ObservableObject {
         }
 
         let document = try VoxelFileFormat.loadDocument(from: url)
-        loadDocument(frames: document.frames, palette: document.palette, animations: document.animations, from: url)
+        let loadedURL = document.format == .vxm ? url : nil
+        loadDocument(frames: document.frames, palette: document.palette, animations: document.animations, from: loadedURL ?? url)
+        if document.format == .legacyVX {
+            currentFileURL = nil
+            currentFileURLStorage = nil
+        }
     }
 
     private func presentFileError(_ error: Error) {
